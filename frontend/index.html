@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="vi">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Tải YouTube – Đơn giản</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --panel: #f7faf7;
+      --soft: #d9e7db;
+      --text: #1b1f1c;
+      --muted: #5b6b5e;
+      --accent: #31c36a;
+      --accent-2: #22a455;
+      --error: #e03131;
+      --shadow: 0 6px 18px rgba(0, 0, 0, .06);
+      --radius: 14px
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, Segoe UI, Roboto, Arial, sans-serif
+    }
+
+    .wrap {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px
+    }
+
+    h1 {
+      font-size: 22px;
+      margin: 0
+    }
+
+    .card {
+      background: #fff;
+      border: 1px solid var(--soft);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 16px
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid var(--soft);
+      border-radius: 10px;
+      font-size: 14px
+    }
+
+    button {
+      padding: 10px 14px;
+      border: none;
+      border-radius: 10px;
+      background: var(--accent);
+      color: #fff;
+      cursor: pointer
+    }
+
+    button:disabled {
+      opacity: .6;
+      cursor: not-allowed
+    }
+
+    .actions {
+      margin-top: 15px;
+      display: flex;
+      gap: 10px
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Tải YouTube</h1>
+      <a href="https://github.com/yt-dlp/yt-dlp" target="_blank">yt-dlp</a>
+    </header>
+
+    <div class="card">
+      <input id="url" type="text" placeholder="Dán link YouTube vào đây...">
+      <div class="actions">
+        <button id="btnVideo">Tải Video (MP4 tốt nhất)</button>
+        <button id="btnAudio">Tải Âm Thanh (MP3)</button>
+      </div>
+    </div>
+    <div class="progress" id="prog" style="display:none">
+      <div class="bar" id="bar"></div>
+    </div>
+    <div class="info" id="info"></div>
+  </div>
+
+  <script>
+    const API_BASE = "http://127.0.0.1:8000";
+    const urlEl = document.getElementById("url");
+    const btnV = document.getElementById("btnVideo");
+    const btnA = document.getElementById("btnAudio");
+    const prog = document.getElementById("prog");
+    const bar = document.getElementById("bar");
+    const info = document.getElementById("info");
+
+    async function start(kind) {
+      const url = urlEl.value.trim();
+      if (!url) { alert("Nhập URL YouTube"); return; }
+      btnV.disabled = btnA.disabled = true;
+      prog.style.display = "block";
+      bar.style.width = "0%";
+      info.textContent = "Đang chuẩn bị...";
+
+      const r = await fetch(`${API_BASE}/api/start_download?url=${encodeURIComponent(url)}&kind=${kind}`);
+      if (!r.ok) { info.textContent = "Không khởi tạo được job"; btnV.disabled = btnA.disabled = false; return; }
+      const { job_id } = await r.json();
+      poll(job_id);
+    }
+
+    async function poll(job_id) {
+      const timer = setInterval(async () => {
+        try {
+          const r = await fetch(`${API_BASE}/api/progress?job_id=${job_id}`);
+          if (!r.ok) throw new Error("progress lỗi");
+          const j = await r.json();
+          const pct = Math.max(0, Math.min(100, j.progress || 0));
+          bar.style.width = pct + "%";
+          bar.style.background = "linear-gradient(90deg,#31c36a,#22a455)";
+          info.textContent = `${pct}%  ${j.speed || ""}  ${j.eta ? ("ETA: " + j.eta + "s") : ""}`;
+
+          if (j.status === "done") {
+            clearInterval(timer);
+            info.textContent = "Hoàn tất. Đang tải file...";
+            window.location = `${API_BASE}/api/fetch?job_id=${job_id}`;
+            btnV.disabled = btnA.disabled = false;
+          } else if (j.status === "error") {
+            clearInterval(timer);
+            info.textContent = "Lỗi: " + (j.error || "Không rõ");
+            btnV.disabled = btnA.disabled = false;
+          }
+        } catch (e) {
+          clearInterval(timer);
+          info.textContent = "Mất kết nối tiến trình.";
+          btnV.disabled = btnA.disabled = false;
+        }
+      }, 500);
+    }
+
+    btnV.onclick = () => start("video");   // tải video <=1080p
+    btnA.onclick = () => start("audio");   // tải mp3 192kbps
+  </script>
+
+</body>
+
+</html>
